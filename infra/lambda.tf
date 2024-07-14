@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 locals {
-  dynamodb_arn = "arn:aws:dynamodb:us-east-1:338966484167:table/Customers"
+  dynamodb_arn = ""
 }
 
 resource "aws_iam_role" "lambda_role" {
