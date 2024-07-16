@@ -1,10 +1,10 @@
 import boto3
 import io
-import numpy
 import os
+import boto3.exceptions
+import secrets
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
+import awswrangler as wr
 from datetime import datetime, timedelta
 
 s3_client = boto3.client('s3')
@@ -14,10 +14,13 @@ def get_bucket_name():
     bucket_name = os.environ.get('S3_BUCKET', 'retencaobucket')
     bucket_name = f'{bucket_name}-{env}'
     return bucket_name
-    
+
+def generate_random_hex_string(length=32):
+    return ''.join(secrets.choice('0123456789abcdef') for _ in range(length))
+
 def get_bucket_prefix():
     env = os.environ.get('ENVIRONMENT', 'dev')
-    prefix_name = os.environ.get('S3_FOLDER', 'processed/lake/parquet/')
+    prefix_name = os.environ.get('S3_FOLDER', 'processed/lake/')
     return prefix_name
 
 def get_time():
@@ -72,19 +75,21 @@ def handle_remove(record):
 
 def store_to_s3(event_type, portability_data):
     timestamp = get_time()
-    s3_key = f"{get_bucket_prefix()}{portability_data['num_prde_cip']}-{timestamp}.parquet"
+    now = datetime.now() + timedelta(hours=-3)
+    s3_key = f"s3://{get_bucket_name()}/{get_bucket_prefix()}"
     data = {
         'eventType': event_type,
         'timestamp': timestamp,
+        'year': str(now.year),
+        "month": str(f"{now.month:02d}"),
+        "day": str(f"{now.day:02d}"),
         'data': portability_data
     }
-    
     df = pd.DataFrame(data)
-    table = pa.Table.from_pandas(df)
-    parquet_buffer = io.BytesIO()
-    pq.write_table(table, parquet_buffer)
-    s3_client.put_object(
-        Bucket=get_bucket_name(),
-        Key=s3_key,
-        Body=parquet_buffer.getvalue()
+    wr.s3.to_parquet(
+        df=df,
+        path=s3_key,
+        dataset=True,
+        mode="append",
+        partition_cols=["year", "month", "day"],
     )
